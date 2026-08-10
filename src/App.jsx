@@ -85,6 +85,63 @@ const NJ_DEPENDENT_EXEMPTION = 1500;
 
 const STATE_OPTIONS = ["New York", "New Jersey", "Texas"];
 
+// Official state tax authority links, used in the "Official resources" section
+const STATE_TAX_WEBSITES = {
+  "New York": "https://www.tax.ny.gov/",
+  "New Jersey": "https://www.nj.gov/treasury/taxation/",
+  "Texas": "https://comptroller.texas.gov/taxes/",
+  "Alabama": "https://www.revenue.alabama.gov/",
+  "Alaska": "https://tax.alaska.gov/",
+  "Arizona": "https://azdor.gov/",
+  "Arkansas": "https://www.dfa.arkansas.gov/",
+  "California": "https://www.ftb.ca.gov/",
+  "Colorado": "https://tax.colorado.gov/",
+  "Connecticut": "https://portal.ct.gov/drs",
+  "Delaware": "https://revenue.delaware.gov/",
+  "Florida": "https://floridarevenue.com/",
+  "Georgia": "https://dor.georgia.gov/",
+  "Hawaii": "https://tax.hawaii.gov/",
+  "Idaho": "https://tax.idaho.gov/",
+  "Illinois": "https://tax.illinois.gov/",
+  "Indiana": "https://www.in.gov/dor/",
+  "Iowa": "https://tax.iowa.gov/",
+  "Kansas": "https://www.ksrevenue.gov/",
+  "Kentucky": "https://revenue.ky.gov/",
+  "Louisiana": "https://revenue.louisiana.gov/",
+  "Maine": "https://www.maine.gov/revenue/",
+  "Maryland": "https://www.marylandtaxes.gov/",
+  "Massachusetts": "https://www.mass.gov/orgs/massachusetts-department-of-revenue",
+  "Michigan": "https://www.michigan.gov/treasury",
+  "Minnesota": "https://www.revenue.state.mn.us/",
+  "Mississippi": "https://www.dor.ms.gov/",
+  "Missouri": "https://dor.mo.gov/",
+  "Montana": "https://mtrevenue.gov/",
+  "Nebraska": "https://revenue.nebraska.gov/",
+  "Nevada": "https://tax.nv.gov/",
+  "New Hampshire": "https://www.revenue.nh.gov/",
+  "New Mexico": "https://www.tax.newmexico.gov/",
+  "North Carolina": "https://www.ncdor.gov/",
+  "North Dakota": "https://www.tax.nd.gov/",
+  "Ohio": "https://tax.ohio.gov/",
+  "Oklahoma": "https://oktax.tax.ok.gov/",
+  "Oregon": "https://www.oregon.gov/dor/",
+  "Pennsylvania": "https://www.revenue.pa.gov/",
+  "Rhode Island": "https://tax.ri.gov/",
+  "South Carolina": "https://dor.sc.gov/",
+  "South Dakota": "https://dor.sd.gov/",
+  "Tennessee": "https://www.tn.gov/revenue.html",
+  "Utah": "https://tax.utah.gov/",
+  "Vermont": "https://tax.vermont.gov/",
+  "Virginia": "https://www.tax.virginia.gov/",
+  "Washington": "https://dor.wa.gov/",
+  "West Virginia": "https://tax.wv.gov/",
+  "Wisconsin": "https://www.revenue.wi.gov/",
+  "Wyoming": "https://revenue.wyo.gov/",
+  "District of Columbia": "https://otr.cfo.dc.gov/"
+};
+const IRS_WEBSITE = "https://www.irs.gov/payments";
+const IRS_WITHHOLDING_ESTIMATOR = "https://www.irs.gov/individuals/tax-withholding-estimator";
+
 // ---------- Fallback flat-rate approximations for all other states ----------
 // These are rough effective-rate stand-ins (not real brackets/deductions) for states
 // not yet fully modeled. Always shown as a low-confidence estimate in the UI.
@@ -289,11 +346,11 @@ export default function WithholdingTracker() {
   }
 
   const inputCls =
-    "w-full bg-transparent border-b-2 border-[#0F2A3D]/20 focus:border-[#B5482E] outline-none py-2 text-lg font-serif text-[#0F2A3D] placeholder:text-[#0F2A3D]/30 transition-colors";
+    "w-full bg-transparent border-b-2 border-[#0F2A3D]/20 focus:border-[#C9962E] outline-none py-2 text-lg font-serif text-[#0F2A3D] placeholder:text-[#0F2A3D]/30 transition-colors";
   const labelCls = "block text-xs uppercase tracking-[0.12em] text-[#0F2A3D]/60 font-sans font-semibold mb-1";
 
   return (
-    <div className="min-h-screen bg-[#F7F4EE] text-[#0F2A3D]" style={{ fontFamily: "'Source Serif 4', Georgia, serif" }}>
+    <div className="min-h-screen bg-[#FFFFFF] text-[#0F2A3D]" style={{ fontFamily: "'Source Serif 4', Georgia, serif" }}>
       <style>{`
         @import url('https://fonts.googleapis.com/css2?family=Source+Serif+4:wght@400;600;700&family=Inter:wght@400;500;600;700&display=swap');
         .font-sans { font-family: 'Inter', system-ui, sans-serif; }
@@ -303,8 +360,8 @@ export default function WithholdingTracker() {
 
       <div className="max-w-xl mx-auto px-6 py-12">
         <header className="mb-10">
-          <div className="font-sans text-xs uppercase tracking-[0.2em] text-[#B5482E] font-bold mb-2">
-            Sterling Tax Group
+          <div className="font-sans text-xs uppercase tracking-[0.2em] text-[#C9962E] font-bold mb-2">
+            Ty Does Taxes
           </div>
           <h1 className="font-serif text-3xl sm:text-4xl font-semibold leading-tight">
             Will your withholding<br />cover you by December?
@@ -328,7 +385,7 @@ export default function WithholdingTracker() {
                     onClick={() => setFilingStatus(val)}
                     className={`text-sm py-2 px-3 rounded border text-left transition-colors ${
                       filingStatus === val
-                        ? "bg-[#0F2A3D] text-[#F7F4EE] border-[#0F2A3D]"
+                        ? "bg-[#0F2A3D] text-[#FFFFFF] border-[#0F2A3D]"
                         : "border-[#0F2A3D]/20 hover:border-[#0F2A3D]/50"
                     }`}
                   >
@@ -347,7 +404,7 @@ export default function WithholdingTracker() {
                     onClick={() => { setStateName(s); if (s !== "New York") setIsNYC(false); setShowOtherStates(false); }}
                     className={`text-sm py-2 rounded border transition-colors ${
                       stateName === s
-                        ? "bg-[#0F2A3D] text-[#F7F4EE] border-[#0F2A3D]"
+                        ? "bg-[#0F2A3D] text-[#FFFFFF] border-[#0F2A3D]"
                         : "border-[#0F2A3D]/20 hover:border-[#0F2A3D]/50"
                     }`}
                   >
@@ -359,7 +416,7 @@ export default function WithholdingTracker() {
                 onClick={() => setShowOtherStates(!showOtherStates)}
                 className={`font-sans text-sm w-full text-left py-2 px-3 mt-2 rounded border transition-colors ${
                   showOtherStates || (stateName && !STATE_OPTIONS.includes(stateName))
-                    ? "bg-[#0F2A3D] text-[#F7F4EE] border-[#0F2A3D]"
+                    ? "bg-[#0F2A3D] text-[#FFFFFF] border-[#0F2A3D]"
                     : "border-[#0F2A3D]/20 hover:border-[#0F2A3D]/50"
                 }`}
               >
@@ -371,7 +428,7 @@ export default function WithholdingTracker() {
                   <select
                     value={stateName && !STATE_OPTIONS.includes(stateName) ? stateName : ""}
                     onChange={(e) => setStateName(e.target.value)}
-                    className="w-full bg-white border border-[#0F2A3D]/20 rounded px-3 py-2 font-sans text-sm outline-none focus:border-[#B5482E]"
+                    className="w-full bg-white border border-[#0F2A3D]/20 rounded px-3 py-2 font-sans text-sm outline-none focus:border-[#C9962E]"
                   >
                     <option value="" disabled>Select your state</option>
                     {ALL_OTHER_STATES.map((s) => (
@@ -387,12 +444,12 @@ export default function WithholdingTracker() {
                         type="email" value={requestEmail}
                         onChange={(e) => setRequestEmail(e.target.value)}
                         placeholder="Email (optional)"
-                        className="flex-1 bg-white border border-[#0F2A3D]/20 rounded px-3 py-2 font-sans text-sm outline-none focus:border-[#B5482E]"
+                        className="flex-1 bg-white border border-[#0F2A3D]/20 rounded px-3 py-2 font-sans text-sm outline-none focus:border-[#C9962E]"
                       />
                       <button
                         onClick={submitStateRequest}
                         disabled={!stateName || STATE_OPTIONS.includes(stateName)}
-                        className="font-sans text-sm bg-[#B5482E] text-[#F7F4EE] px-4 rounded disabled:opacity-30 hover:bg-[#9c3c25] transition-colors"
+                        className="font-sans text-sm bg-[#C9962E] text-[#FFFFFF] px-4 rounded disabled:opacity-30 hover:bg-[#B8862A] transition-colors"
                       >
                         Request
                       </button>
@@ -410,10 +467,40 @@ export default function WithholdingTracker() {
                   <input
                     type="checkbox" checked={isNYC}
                     onChange={(e) => setIsNYC(e.target.checked)}
-                    className="accent-[#B5482E] w-4 h-4"
+                    className="accent-[#C9962E] w-4 h-4"
                   />
                   I live in New York City (adds NYC local tax)
                 </label>
+              )}
+
+              {stateName && (
+                <div className="mt-4 bg-[#0F2A3D]/5 rounded p-3 font-sans text-sm">
+                  <div className="text-xs uppercase tracking-[0.1em] text-[#0F2A3D]/60 font-semibold mb-2">
+                    Official resources
+                  </div>
+                  <div className="flex flex-col gap-1.5">
+                    <a
+                      href={IRS_WEBSITE} target="_blank" rel="noopener noreferrer"
+                      className="text-[#C9962E] hover:underline"
+                    >
+                      IRS — make a payment or check your account →
+                    </a>
+                    <a
+                      href={IRS_WITHHOLDING_ESTIMATOR} target="_blank" rel="noopener noreferrer"
+                      className="text-[#C9962E] hover:underline"
+                    >
+                      IRS Tax Withholding Estimator (official tool) →
+                    </a>
+                    {STATE_TAX_WEBSITES[stateName] && (
+                      <a
+                        href={STATE_TAX_WEBSITES[stateName]} target="_blank" rel="noopener noreferrer"
+                        className="text-[#C9962E] hover:underline"
+                      >
+                        {stateName} Department of Revenue / Taxation →
+                      </a>
+                    )}
+                  </div>
+                </div>
               )}
             </div>
 
@@ -433,7 +520,7 @@ export default function WithholdingTracker() {
                   onClick={() => setIncomeMode("know")}
                   className={`text-sm py-2 rounded border transition-colors ${
                     incomeMode === "know"
-                      ? "bg-[#0F2A3D] text-[#F7F4EE] border-[#0F2A3D]"
+                      ? "bg-[#0F2A3D] text-[#FFFFFF] border-[#0F2A3D]"
                       : "border-[#0F2A3D]/20 hover:border-[#0F2A3D]/50"
                   }`}
                 >
@@ -443,7 +530,7 @@ export default function WithholdingTracker() {
                   onClick={() => setIncomeMode("calculate")}
                   className={`text-sm py-2 rounded border transition-colors ${
                     incomeMode === "calculate"
-                      ? "bg-[#0F2A3D] text-[#F7F4EE] border-[#0F2A3D]"
+                      ? "bg-[#0F2A3D] text-[#FFFFFF] border-[#0F2A3D]"
                       : "border-[#0F2A3D]/20 hover:border-[#0F2A3D]/50"
                   }`}
                 >
@@ -467,7 +554,7 @@ export default function WithholdingTracker() {
                       onClick={() => setProjectionMethod("consistent")}
                       className={`text-sm py-2 px-3 rounded border text-left transition-colors ${
                         projectionMethod === "consistent"
-                          ? "bg-[#0F2A3D] text-[#F7F4EE] border-[#0F2A3D]"
+                          ? "bg-[#0F2A3D] text-[#FFFFFF] border-[#0F2A3D]"
                           : "border-[#0F2A3D]/20 hover:border-[#0F2A3D]/50 bg-white"
                       }`}
                     >
@@ -477,7 +564,7 @@ export default function WithholdingTracker() {
                       onClick={() => setProjectionMethod("average")}
                       className={`text-sm py-2 px-3 rounded border text-left transition-colors ${
                         projectionMethod === "average"
-                          ? "bg-[#0F2A3D] text-[#F7F4EE] border-[#0F2A3D]"
+                          ? "bg-[#0F2A3D] text-[#FFFFFF] border-[#0F2A3D]"
                           : "border-[#0F2A3D]/20 hover:border-[#0F2A3D]/50 bg-white"
                       }`}
                     >
@@ -528,7 +615,7 @@ export default function WithholdingTracker() {
                     onClick={() => setPayFrequency(f)}
                     className={`text-xs py-2 rounded border transition-colors ${
                       payFrequency === f
-                        ? "bg-[#0F2A3D] text-[#F7F4EE] border-[#0F2A3D]"
+                        ? "bg-[#0F2A3D] text-[#FFFFFF] border-[#0F2A3D]"
                         : "border-[#0F2A3D]/20 hover:border-[#0F2A3D]/50"
                     }`}
                   >
@@ -571,7 +658,7 @@ export default function WithholdingTracker() {
             <button
               disabled={!canSubmit}
               onClick={() => setStep("results")}
-              className="font-sans w-full bg-[#B5482E] text-[#F7F4EE] font-semibold py-3.5 rounded mt-4 disabled:opacity-30 disabled:cursor-not-allowed hover:bg-[#9c3c25] transition-colors"
+              className="font-sans w-full bg-[#C9962E] text-[#FFFFFF] font-semibold py-3.5 rounded mt-4 disabled:opacity-30 disabled:cursor-not-allowed hover:bg-[#B8862A] transition-colors"
             >
               See my projection
             </button>
@@ -593,7 +680,7 @@ export default function WithholdingTracker() {
 
 function Gauge({ label, projected, liability, onTrack }) {
   const pct = liability > 0 ? Math.min(100, (projected / liability) * 100) : 100;
-  const color = onTrack ? "#3D7A5C" : "#B5482E";
+  const color = onTrack ? "#3D7A5C" : "#C9962E";
 
   return (
     <div className="mb-6">
@@ -627,10 +714,10 @@ function ResultsView({ results, stateName, isNYC, onBack }) {
   return (
     <div>
       <div
-        className={`rounded-lg p-6 mb-8 ${overallOnTrack ? "bg-[#3D7A5C]/10 border border-[#3D7A5C]/30" : "bg-[#B5482E]/10 border border-[#B5482E]/30"}`}
+        className={`rounded-lg p-6 mb-8 ${overallOnTrack ? "bg-[#3D7A5C]/10 border border-[#3D7A5C]/30" : "bg-[#C9962E]/10 border border-[#C9962E]/30"}`}
       >
         <div className="font-sans text-xs uppercase tracking-[0.12em] font-bold mb-1"
-             style={{ color: overallOnTrack ? "#3D7A5C" : "#B5482E" }}>
+             style={{ color: overallOnTrack ? "#3D7A5C" : "#C9962E" }}>
           {overallOnTrack ? "On track" : "Projected shortfall"}
         </div>
         <p className="font-serif text-lg leading-snug">
@@ -708,9 +795,9 @@ function ResultsView({ results, stateName, isNYC, onBack }) {
         <a
           href="#"
           onClick={(e) => e.preventDefault()}
-          className="font-sans text-sm flex-1 text-center bg-[#0F2A3D] text-[#F7F4EE] py-3 rounded hover:bg-[#0F2A3D]/90 transition-colors"
+          className="font-sans text-sm flex-1 text-center bg-[#0F2A3D] text-[#FFFFFF] py-3 rounded hover:bg-[#0F2A3D]/90 transition-colors"
         >
-          Talk to Sterling Tax Group
+          Talk to Ty Does Taxes
         </a>
       </div>
     </div>
