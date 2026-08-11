@@ -85,6 +85,17 @@ const NJ_DEPENDENT_EXEMPTION = 1500;
 
 const STATE_OPTIONS = ["New York", "New Jersey", "Texas"];
 
+// Estimates how many pay periods have elapsed so far this year, based on today's date.
+// Assumes a standard Jan 1 start; this is a starting estimate, always editable by the user.
+function estimatePayPeriodsElapsed(frequency) {
+  const today = new Date();
+  const startOfYear = new Date(today.getFullYear(), 0, 1);
+  const daysElapsed = Math.floor((today - startOfYear) / 86400000) + 1;
+  const totalPeriods = PAY_FREQUENCIES[frequency];
+  const estimate = Math.round((daysElapsed / 365) * totalPeriods);
+  return Math.min(totalPeriods, Math.max(1, estimate));
+}
+
 // Official state tax authority links, used in the "Official resources" section
 const STATE_TAX_WEBSITES = {
   "New York": "https://www.tax.ny.gov/",
@@ -251,6 +262,21 @@ export default function WithholdingTracker() {
   const [ytdFederalWithheld, setYtdFederalWithheld] = useState("");
   const [ytdStateWithheld, setYtdStateWithheld] = useState("");
 
+  const [hasMultipleJobs, setHasMultipleJobs] = useState(false);
+  const [additionalJobs, setAdditionalJobs] = useState([]);
+
+  function addJob() {
+    setAdditionalJobs([...additionalJobs, { annualIncome: "", ytdFederalWithheld: "", ytdStateWithheld: "" }]);
+  }
+  function updateJob(index, field, value) {
+    const updated = [...additionalJobs];
+    updated[index] = { ...updated[index], [field]: value };
+    setAdditionalJobs(updated);
+  }
+  function removeJob(index) {
+    setAdditionalJobs(additionalJobs.filter((_, i) => i !== index));
+  }
+
   const totalPeriods = PAY_FREQUENCIES[payFrequency];
 
   const calculatedAnnualIncome = useMemo(() => {
@@ -268,12 +294,17 @@ export default function WithholdingTracker() {
     }
   }, [projectionMethod, recentGrossPay, ytdGrossPay, payPeriodsElapsed, totalPeriods]);
 
-  const effectiveIncome = incomeMode === "know" ? Number(grossIncome) : (calculatedAnnualIncome || 0);
+  const additionalJobsIncome = additionalJobs.reduce((sum, j) => sum + (Number(j.annualIncome) || 0), 0);
+  const additionalJobsFedWithheld = additionalJobs.reduce((sum, j) => sum + (Number(j.ytdFederalWithheld) || 0), 0);
+  const additionalJobsStateWithheld = additionalJobs.reduce((sum, j) => sum + (Number(j.ytdStateWithheld) || 0), 0);
+
+  const effectiveIncome = (incomeMode === "know" ? Number(grossIncome) : (calculatedAnnualIncome || 0)) + additionalJobsIncome;
 
   const incomeReady =
-    incomeMode === "know"
+    (incomeMode === "know"
       ? Number(grossIncome) > 0
-      : calculatedAnnualIncome !== null && calculatedAnnualIncome > 0;
+      : calculatedAnnualIncome !== null && calculatedAnnualIncome > 0) &&
+    (!hasMultipleJobs || additionalJobs.every(j => Number(j.annualIncome) > 0 && j.ytdFederalWithheld !== "" && (stateName === "Texas" || j.ytdStateWithheld !== "")));
 
   const canSubmit =
     stateName &&
@@ -281,14 +312,15 @@ export default function WithholdingTracker() {
     Number(payPeriodsElapsed) > 0 &&
     Number(payPeriodsElapsed) <= totalPeriods &&
     ytdFederalWithheld !== "" &&
-    (stateName === "Texas" || ytdStateWithheld !== "");
+    (stateName === "Texas" || ytdStateWithheld !== "") &&
+    (!hasMultipleJobs || additionalJobs.length > 0);
 
   const results = useMemo(() => {
     if (step !== "results") return null;
     const income = effectiveIncome;
     const periodsElapsed = Number(payPeriodsElapsed);
-    const fedWithheldSoFar = Number(ytdFederalWithheld);
-    const stateWithheldSoFar = Number(ytdStateWithheld);
+    const fedWithheldSoFar = Number(ytdFederalWithheld) + additionalJobsFedWithheld;
+    const stateWithheldSoFar = Number(ytdStateWithheld) + additionalJobsStateWithheld;
 
     const { tax: fedLiability, ctc } = estimateFederalTax({
       grossIncome: income, filingStatus, dependents: Number(dependents)
@@ -321,7 +353,7 @@ export default function WithholdingTracker() {
       hasStateTax: stateName !== "Texas" && stateName !== "" && !NO_INCOME_TAX_STATES.includes(stateName),
       stateConfidence
     };
-  }, [step, effectiveIncome, payPeriodsElapsed, ytdFederalWithheld, ytdStateWithheld, stateName, isNYC, filingStatus, dependents, totalPeriods]);
+  }, [step, effectiveIncome, payPeriodsElapsed, ytdFederalWithheld, ytdStateWithheld, stateName, isNYC, filingStatus, dependents, totalPeriods, additionalJobsFedWithheld, additionalJobsStateWithheld]);
 
   // FORMSPREE_ENDPOINT: replace with your own Formspree form URL.
   // See README.md step "Connect the state request form" for how to get one (it's free).
@@ -629,11 +661,23 @@ export default function WithholdingTracker() {
               <label className={labelCls}>
                 Pay periods elapsed so far this year (of {totalPeriods})
               </label>
-              <input
-                type="number" min="1" max={totalPeriods} value={payPeriodsElapsed}
-                onChange={(e) => setPayPeriodsElapsed(e.target.value)}
-                className={inputCls} placeholder="e.g. 15"
-              />
+              <div className="flex gap-2 items-center">
+                <input
+                  type="number" min="1" max={totalPeriods} value={payPeriodsElapsed}
+                  onChange={(e) => setPayPeriodsElapsed(e.target.value)}
+                  className={inputCls} placeholder="e.g. 15"
+                />
+                <button
+                  type="button"
+                  onClick={() => setPayPeriodsElapsed(String(estimatePayPeriodsElapsed(payFrequency)))}
+                  className="font-sans text-xs whitespace-nowrap border border-[#0F2A3D]/30 rounded px-3 py-2 hover:bg-[#0F2A3D]/5 transition-colors"
+                >
+                  Not sure? Estimate
+                </button>
+              </div>
+              <p className="font-sans text-xs text-[#0F2A3D]/50 mt-1">
+                We'll estimate based on today's date and your pay frequency — you can adjust it if it's off.
+              </p>
             </div>
 
             <div className={`grid gap-6 ${stateName === "Texas" ? "grid-cols-1" : "grid-cols-2"}`}>
@@ -653,6 +697,83 @@ export default function WithholdingTracker() {
                     onChange={(e) => setYtdStateWithheld(e.target.value)}
                     className={inputCls} placeholder="$0"
                   />
+                </div>
+              )}
+            </div>
+
+            <div>
+              <label className="flex items-center gap-2 font-sans text-sm cursor-pointer mb-2">
+                <input
+                  type="checkbox" checked={hasMultipleJobs}
+                  onChange={(e) => {
+                    setHasMultipleJobs(e.target.checked);
+                    if (e.target.checked && additionalJobs.length === 0) addJob();
+                    if (!e.target.checked) setAdditionalJobs([]);
+                  }}
+                  className="accent-[#C9962E] w-4 h-4"
+                />
+                I had more than one job this year
+              </label>
+
+              {hasMultipleJobs && (
+                <div className="space-y-4">
+                  {additionalJobs.map((job, i) => (
+                    <div key={i} className="bg-[#0F2A3D]/5 rounded p-4 space-y-3">
+                      <div className="flex justify-between items-center">
+                        <span className="font-sans text-xs uppercase tracking-[0.1em] text-[#0F2A3D]/60 font-semibold">
+                          Additional job {i + 1}
+                        </span>
+                        <button
+                          type="button"
+                          onClick={() => removeJob(i)}
+                          className="font-sans text-xs text-[#C9962E] hover:underline"
+                        >
+                          Remove
+                        </button>
+                      </div>
+                      <div>
+                        <label className={labelCls}>Estimated total income from this job this year</label>
+                        <input
+                          type="number" value={job.annualIncome}
+                          onChange={(e) => updateJob(i, "annualIncome", e.target.value)}
+                          className="w-full bg-white border border-[#0F2A3D]/20 rounded px-3 py-2 font-sans text-sm outline-none focus:border-[#C9962E]"
+                          placeholder="$15,000"
+                        />
+                      </div>
+                      <div className={`grid gap-3 ${stateName === "Texas" ? "grid-cols-1" : "grid-cols-2"}`}>
+                        <div>
+                          <label className={labelCls}>YTD federal withheld (this job)</label>
+                          <input
+                            type="number" value={job.ytdFederalWithheld}
+                            onChange={(e) => updateJob(i, "ytdFederalWithheld", e.target.value)}
+                            className="w-full bg-white border border-[#0F2A3D]/20 rounded px-3 py-2 font-sans text-sm outline-none focus:border-[#C9962E]"
+                            placeholder="$0"
+                          />
+                        </div>
+                        {stateName !== "Texas" && (
+                          <div>
+                            <label className={labelCls}>YTD state withheld (this job)</label>
+                            <input
+                              type="number" value={job.ytdStateWithheld}
+                              onChange={(e) => updateJob(i, "ytdStateWithheld", e.target.value)}
+                              className="w-full bg-white border border-[#0F2A3D]/20 rounded px-3 py-2 font-sans text-sm outline-none focus:border-[#C9962E]"
+                              placeholder="$0"
+                            />
+                          </div>
+                        )}
+                      </div>
+                    </div>
+                  ))}
+                  <button
+                    type="button"
+                    onClick={addJob}
+                    className="font-sans text-sm border border-[#0F2A3D]/30 rounded px-4 py-2 hover:bg-[#0F2A3D]/5 transition-colors"
+                  >
+                    + Add another job
+                  </button>
+                  <p className="font-sans text-xs text-[#0F2A3D]/50">
+                    Use the numbers from each job's most recent pay stub, as of today. We'll combine everything for one overall projection.
+                  </p>
                 </div>
               )}
             </div>
