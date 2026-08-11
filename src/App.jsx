@@ -281,7 +281,7 @@ export default function WithholdingTracker() {
     Number(payPeriodsElapsed) > 0 &&
     Number(payPeriodsElapsed) <= totalPeriods &&
     ytdFederalWithheld !== "" &&
-    ytdStateWithheld !== "";
+    (stateName === "Texas" || ytdStateWithheld !== "");
 
   const results = useMemo(() => {
     if (step !== "results") return null;
@@ -325,7 +325,7 @@ export default function WithholdingTracker() {
 
   // FORMSPREE_ENDPOINT: replace with your own Formspree form URL.
   // See README.md step "Connect the state request form" for how to get one (it's free).
-  const FORMSPREE_ENDPOINT = "https://formspree.io/f/mqpzqkgl";
+  const FORMSPREE_ENDPOINT = "https://formspree.io/f/YOUR_FORM_ID";
 
   async function submitStateRequest() {
     try {
@@ -636,7 +636,7 @@ export default function WithholdingTracker() {
               />
             </div>
 
-            <div className="grid grid-cols-2 gap-6">
+            <div className={`grid gap-6 ${stateName === "Texas" ? "grid-cols-1" : "grid-cols-2"}`}>
               <div>
                 <label className={labelCls}>YTD federal tax withheld</label>
                 <input
@@ -645,14 +645,16 @@ export default function WithholdingTracker() {
                   className={inputCls} placeholder="$0"
                 />
               </div>
-              <div>
-                <label className={labelCls}>YTD state tax withheld</label>
-                <input
-                  type="number" value={ytdStateWithheld}
-                  onChange={(e) => setYtdStateWithheld(e.target.value)}
-                  className={inputCls} placeholder="$0"
-                />
-              </div>
+              {stateName !== "Texas" && (
+                <div>
+                  <label className={labelCls}>YTD state tax withheld</label>
+                  <input
+                    type="number" value={ytdStateWithheld}
+                    onChange={(e) => setYtdStateWithheld(e.target.value)}
+                    className={inputCls} placeholder="$0"
+                  />
+                </div>
+              )}
             </div>
 
             <button
@@ -793,8 +795,9 @@ function ResultsView({ results, stateName, isNYC, onBack }) {
           Start over
         </button>
         <a
-          href="#"
-          onClick={(e) => e.preventDefault()}
+          href="https://instagram.com/tydoestaxes"
+          target="_blank"
+          rel="noopener noreferrer"
           className="font-sans text-sm flex-1 text-center bg-[#0F2A3D] text-[#FFFFFF] py-3 rounded hover:bg-[#0F2A3D]/90 transition-colors"
         >
           Talk to Ty Does Taxes
