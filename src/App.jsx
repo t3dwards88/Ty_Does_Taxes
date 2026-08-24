@@ -1,4 +1,5 @@
 import React, { useState, useMemo } from "react";
+import { jsPDF } from "jspdf";
 
 // ---------- Tax reference data (2025 tax year, simplified) ----------
 
@@ -239,6 +240,91 @@ function fmt(n) {
   return n.toLocaleString("en-US", { style: "currency", currency: "USD", maximumFractionDigits: 0 });
 }
 
+function generateResultsPDF(results, stateName, isNYC) {
+  const {
+    fedLiability, stateLiability, projectedFed, projectedState,
+    fedGap, stateGap, fedRaisePerCheck, stateRaisePerCheck,
+    periodsRemaining, fedOnTrack, stateOnTrack, hasStateTax
+  } = results;
+
+  const doc = new jsPDF();
+  const marginX = 20;
+  let y = 20;
+
+  doc.setFontSize(18);
+  doc.setTextColor(15, 42, 61); // navy
+  doc.text("Ty Does Taxes", marginX, y);
+  y += 8;
+
+  doc.setFontSize(12);
+  doc.setTextColor(80, 80, 80);
+  doc.text("Withholding Projection Summary", marginX, y);
+  y += 6;
+  doc.setFontSize(9);
+  doc.text(`Generated ${new Date().toLocaleDateString()}`, marginX, y);
+  y += 12;
+
+  doc.setDrawColor(200, 200, 200);
+  doc.line(marginX, y, 190, y);
+  y += 10;
+
+  doc.setFontSize(13);
+  doc.setTextColor(15, 42, 61);
+  const overallOnTrack = fedOnTrack && (!hasStateTax || stateOnTrack);
+  doc.text(overallOnTrack ? "Status: On Track" : "Status: Projected Shortfall", marginX, y);
+  y += 10;
+
+  doc.setFontSize(11);
+  doc.setTextColor(40, 40, 40);
+  doc.text("Federal", marginX, y);
+  y += 6;
+  doc.setFontSize(10);
+  doc.text(`Projected withholding by year end: ${fmt(projectedFed)}`, marginX, y); y += 6;
+  doc.text(`Estimated federal liability: ${fmt(fedLiability)}`, marginX, y); y += 6;
+  if (!fedOnTrack && periodsRemaining > 0) {
+    doc.text(`Suggested adjustment: +${fmt(fedRaisePerCheck)} per paycheck (W-4 line 4c)`, marginX, y);
+    y += 6;
+  }
+  y += 6;
+
+  if (hasStateTax) {
+    doc.setFontSize(11);
+    doc.setTextColor(40, 40, 40);
+    doc.text(`State${stateName === "New York" && isNYC ? " + NYC" : ` (${stateName})`}`, marginX, y);
+    y += 6;
+    doc.setFontSize(10);
+    doc.text(`Projected withholding by year end: ${fmt(projectedState)}`, marginX, y); y += 6;
+    doc.text(`Estimated state liability: ${fmt(stateLiability)}`, marginX, y); y += 6;
+    if (!stateOnTrack && periodsRemaining > 0) {
+      doc.text(`Suggested adjustment: +${fmt(stateRaisePerCheck)} per paycheck`, marginX, y);
+      y += 6;
+    }
+    y += 6;
+  }
+
+  y += 6;
+  doc.setDrawColor(200, 200, 200);
+  doc.line(marginX, y, 190, y);
+  y += 8;
+
+  doc.setFontSize(8);
+  doc.setTextColor(120, 120, 120);
+  const disclaimer = doc.splitTextToSize(
+    "This is a simplified projection using standard deductions/exemptions and general bracket math. " +
+    "It doesn't account for itemized deductions, self-employment income, capital gains, or every credit. " +
+    "Treat it as a directional estimate, not a guarantee. For a precise number, talk to a preparer.",
+    170
+  );
+  doc.text(disclaimer, marginX, y);
+  y += disclaimer.length * 4 + 8;
+
+  doc.setFontSize(9);
+  doc.setTextColor(15, 42, 61);
+  doc.text("Ty Does Taxes | instagram.com/tydoestaxes", marginX, y);
+
+  doc.save("withholding-projection.pdf");
+}
+
 export default function WithholdingTracker() {
   const [step, setStep] = useState("form");
   const [filingStatus, setFilingStatus] = useState("single");
@@ -359,6 +445,11 @@ export default function WithholdingTracker() {
   // See README.md step "Connect the state request form" for how to get one (it's free).
   const FORMSPREE_ENDPOINT = "https://formspree.io/f/YOUR_FORM_ID";
 
+  // FORMSPREE_LEADS_ENDPOINT: a SEPARATE Formspree form for results/contact leads,
+  // so these don't get mixed in with state requests in your inbox.
+  // Create a second form at formspree.io the same way, then paste its URL here.
+  const FORMSPREE_LEADS_ENDPOINT = "https://formspree.io/f/YOUR_LEADS_FORM_ID";
+
   async function submitStateRequest() {
     try {
       await fetch(FORMSPREE_ENDPOINT, {
@@ -374,6 +465,23 @@ export default function WithholdingTracker() {
     } catch (e) {
       // Fail gracefully so the calculator itself never breaks over this
       setRequestSubmitted(true);
+    }
+  }
+
+  async function submitLead({ email, wantsCopy, wantsContact }) {
+    try {
+      await fetch(FORMSPREE_LEADS_ENDPOINT, {
+        method: "POST",
+        headers: { "Content-Type": "application/json", Accept: "application/json" },
+        body: JSON.stringify({
+          email,
+          wants_pdf_copy: wantsCopy,
+          consents_to_tax_service_contact: wantsContact,
+          timestamp: new Date().toISOString()
+        })
+      });
+    } catch (e) {
+      // Fail silently - the PDF download itself should never be blocked by this
     }
   }
 
@@ -794,6 +902,7 @@ export default function WithholdingTracker() {
             stateName={stateName}
             isNYC={isNYC}
             onBack={() => setStep("form")}
+            submitLead={submitLead}
           />
         )}
       </div>
@@ -825,14 +934,27 @@ function Gauge({ label, projected, liability, onTrack }) {
   );
 }
 
-function ResultsView({ results, stateName, isNYC, onBack }) {
+function ResultsView({ results, stateName, isNYC, onBack, submitLead }) {
   const {
     fedLiability, stateLiability, projectedFed, projectedState,
     fedGap, stateGap, fedRaisePerCheck, stateRaisePerCheck,
     periodsRemaining, fedOnTrack, stateOnTrack, hasStateTax, stateConfidence
   } = results;
 
+  const [email, setEmail] = useState("");
+  const [wantsCopy, setWantsCopy] = useState(false);
+  const [wantsContact, setWantsContact] = useState(false);
+  const [emailSubmitted, setEmailSubmitted] = useState(false);
+
   const overallOnTrack = fedOnTrack && (!hasStateTax || stateOnTrack);
+
+  function handleDownloadPdf() {
+    generateResultsPDF(results, stateName, isNYC);
+    if (email && (wantsCopy || wantsContact)) {
+      submitLead({ email, wantsCopy, wantsContact });
+      setEmailSubmitted(true);
+    }
+  }
 
   return (
     <div>
@@ -906,6 +1028,57 @@ function ResultsView({ results, stateName, isNYC, onBack }) {
           income, capital gains, or every credit, so treat it as a directional estimate. For a precise number, talk
           to a preparer.
         </p>
+      </div>
+
+      <div className="mt-8 pt-6 border-t border-[#0F2A3D]/15">
+        <h3 className="font-sans text-xs uppercase tracking-[0.12em] font-bold text-[#0F2A3D]/70 mb-3">
+          Save your results
+        </h3>
+        <button
+          onClick={handleDownloadPdf}
+          className="font-sans text-sm w-full border border-[#0F2A3D]/30 py-3 rounded hover:bg-[#0F2A3D]/5 transition-colors mb-4"
+        >
+          Download my results as a PDF
+        </button>
+
+        <div className="bg-[#0F2A3D]/5 rounded p-4">
+          <label className="block text-xs uppercase tracking-[0.12em] text-[#0F2A3D]/60 font-sans font-semibold mb-1">Email (optional)</label>
+          <input
+            type="email" value={email}
+            onChange={(e) => setEmail(e.target.value)}
+            placeholder="you@example.com"
+            className="w-full bg-white border border-[#0F2A3D]/20 rounded px-3 py-2 font-sans text-sm outline-none focus:border-[#C9962E] mb-3"
+          />
+          <label className="flex items-start gap-2 font-sans text-sm cursor-pointer mb-2">
+            <input
+              type="checkbox" checked={wantsCopy}
+              onChange={(e) => setWantsCopy(e.target.checked)}
+              className="accent-[#C9962E] w-4 h-4 mt-0.5"
+            />
+            <span>Send me a copy of this projection</span>
+          </label>
+          <label className="flex items-start gap-2 font-sans text-sm cursor-pointer">
+            <input
+              type="checkbox" checked={wantsContact}
+              onChange={(e) => setWantsContact(e.target.checked)}
+              className="accent-[#C9962E] w-4 h-4 mt-0.5"
+            />
+            <span>
+              Yes, contact me about tax preparation services from Ty Does Taxes. We don't sell or share your information, and you can unsubscribe anytime.
+            </span>
+          </label>
+
+          {(wantsCopy || wantsContact) && !emailSubmitted && (
+            <p className="font-sans text-xs text-[#0F2A3D]/50 mt-3">
+              Click "Download my results as a PDF" above to submit.
+            </p>
+          )}
+          {emailSubmitted && (
+            <p className="font-sans text-sm text-[#3D7A5C] font-semibold mt-3">
+              Thanks — we've got it.
+            </p>
+          )}
+        </div>
       </div>
 
       <div className="flex gap-3 mt-8">
