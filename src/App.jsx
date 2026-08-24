@@ -347,6 +347,8 @@ export default function WithholdingTracker() {
   const [payPeriodsElapsed, setPayPeriodsElapsed] = useState("");
   const [ytdFederalWithheld, setYtdFederalWithheld] = useState("");
   const [ytdStateWithheld, setYtdStateWithheld] = useState("");
+  const [isExemptFederal, setIsExemptFederal] = useState(false);
+  const [isExemptState, setIsExemptState] = useState(false);
 
   const [hasMultipleJobs, setHasMultipleJobs] = useState(false);
   const [additionalJobs, setAdditionalJobs] = useState([]);
@@ -397,16 +399,16 @@ export default function WithholdingTracker() {
     incomeReady &&
     Number(payPeriodsElapsed) > 0 &&
     Number(payPeriodsElapsed) <= totalPeriods &&
-    ytdFederalWithheld !== "" &&
-    (stateName === "Texas" || ytdStateWithheld !== "") &&
+    (isExemptFederal || ytdFederalWithheld !== "") &&
+    (stateName === "Texas" || isExemptState || ytdStateWithheld !== "") &&
     (!hasMultipleJobs || additionalJobs.length > 0);
 
   const results = useMemo(() => {
     if (step !== "results") return null;
     const income = effectiveIncome;
     const periodsElapsed = Number(payPeriodsElapsed);
-    const fedWithheldSoFar = Number(ytdFederalWithheld) + additionalJobsFedWithheld;
-    const stateWithheldSoFar = Number(ytdStateWithheld) + additionalJobsStateWithheld;
+    const fedWithheldSoFar = isExemptFederal ? 0 : Number(ytdFederalWithheld) + additionalJobsFedWithheld;
+    const stateWithheldSoFar = isExemptState ? 0 : Number(ytdStateWithheld) + additionalJobsStateWithheld;
 
     const { tax: fedLiability, ctc } = estimateFederalTax({
       grossIncome: income, filingStatus, dependents: Number(dependents)
@@ -415,10 +417,10 @@ export default function WithholdingTracker() {
       grossIncome: income, filingStatus, dependents: Number(dependents), stateName, isNYC
     });
 
-    const perPeriodFed = fedWithheldSoFar / periodsElapsed;
-    const perPeriodState = stateWithheldSoFar / periodsElapsed;
-    const projectedFed = perPeriodFed * totalPeriods;
-    const projectedState = perPeriodState * totalPeriods;
+    const perPeriodFed = isExemptFederal ? 0 : fedWithheldSoFar / periodsElapsed;
+    const perPeriodState = isExemptState ? 0 : stateWithheldSoFar / periodsElapsed;
+    const projectedFed = isExemptFederal ? 0 : perPeriodFed * totalPeriods;
+    const projectedState = isExemptState ? 0 : perPeriodState * totalPeriods;
 
     const periodsRemaining = totalPeriods - periodsElapsed;
 
@@ -428,18 +430,25 @@ export default function WithholdingTracker() {
     const fedRaisePerCheck = periodsRemaining > 0 ? fedGap / periodsRemaining : fedGap;
     const stateRaisePerCheck = periodsRemaining > 0 ? stateGap / periodsRemaining : stateGap;
 
+    // Flags for someone claiming exempt whose income suggests they'll actually owe something -
+    // exempt status is only valid if you expect zero tax liability for the year.
+    const fedExemptMismatch = isExemptFederal && fedLiability > 0;
+    const stateExemptMismatch = isExemptState && stateLiability > 0;
+
     return {
       income, fedLiability, stateLiability, ctc,
       projectedFed, projectedState,
       fedGap, stateGap,
       fedRaisePerCheck, stateRaisePerCheck,
       periodsRemaining, totalPeriods, periodsElapsed,
-      fedOnTrack: fedGap <= 0,
-      stateOnTrack: stateGap <= 0,
+      fedOnTrack: isExemptFederal ? !fedExemptMismatch : fedGap <= 0,
+      stateOnTrack: isExemptState ? !stateExemptMismatch : stateGap <= 0,
       hasStateTax: stateName !== "Texas" && stateName !== "" && !NO_INCOME_TAX_STATES.includes(stateName),
-      stateConfidence
+      stateConfidence,
+      isExemptFederal, isExemptState,
+      fedExemptMismatch, stateExemptMismatch
     };
-  }, [step, effectiveIncome, payPeriodsElapsed, ytdFederalWithheld, ytdStateWithheld, stateName, isNYC, filingStatus, dependents, totalPeriods, additionalJobsFedWithheld, additionalJobsStateWithheld]);
+  }, [step, effectiveIncome, payPeriodsElapsed, ytdFederalWithheld, ytdStateWithheld, stateName, isNYC, filingStatus, dependents, totalPeriods, additionalJobsFedWithheld, additionalJobsStateWithheld, isExemptFederal, isExemptState]);
 
   // FORMSPREE_ENDPOINT: replace with your own Formspree form URL.
   // See README.md step "Connect the state request form" for how to get one (it's free).
@@ -500,8 +509,8 @@ export default function WithholdingTracker() {
 
       <div className="max-w-xl mx-auto px-6 py-12">
         <header className="mb-10">
-          <div className="font-sans text-xs uppercase tracking-[0.2em] text-[#C9962E] font-bold mb-2">
-            Ty Does Taxes
+          <div className="font-sans text-xs uppercase tracking-[0.15em] text-[#C9962E] font-bold mb-3">
+            See If You'll Owe — Free, No Sign-Up, No Catch
           </div>
           <h1 className="font-serif text-3xl sm:text-4xl font-semibold leading-tight">
             Will your withholding<br />cover you by December?
@@ -509,6 +518,14 @@ export default function WithholdingTracker() {
           <p className="font-sans text-sm text-[#0F2A3D]/60 mt-3 leading-relaxed">
             Enter your info from a recent pay stub. We'll project where your withholding lands by year end and tell you exactly what to adjust if it falls short.
           </p>
+          <a
+            href="https://instagram.com/tydoestaxes"
+            target="_blank"
+            rel="noopener noreferrer"
+            className="font-sans text-xs text-[#0F2A3D]/50 mt-4 inline-block hover:text-[#C9962E] transition-colors"
+          >
+            Created by Ty Does Taxes — instagram.com/tydoestaxes
+          </a>
         </header>
 
         {step === "form" && (
@@ -791,20 +808,44 @@ export default function WithholdingTracker() {
             <div className={`grid gap-6 ${stateName === "Texas" ? "grid-cols-1" : "grid-cols-2"}`}>
               <div>
                 <label className={labelCls}>YTD federal tax withheld</label>
-                <input
-                  type="number" value={ytdFederalWithheld}
-                  onChange={(e) => setYtdFederalWithheld(e.target.value)}
-                  className={inputCls} placeholder="$0"
-                />
+                {isExemptFederal ? (
+                  <p className="font-serif text-sm text-[#0F2A3D]/50 py-2">Not applicable — claiming exempt</p>
+                ) : (
+                  <input
+                    type="number" value={ytdFederalWithheld}
+                    onChange={(e) => setYtdFederalWithheld(e.target.value)}
+                    className={inputCls} placeholder="$0"
+                  />
+                )}
+                <label className="flex items-center gap-2 mt-2 font-sans text-xs text-[#0F2A3D]/60 cursor-pointer">
+                  <input
+                    type="checkbox" checked={isExemptFederal}
+                    onChange={(e) => setIsExemptFederal(e.target.checked)}
+                    className="accent-[#C9962E] w-3.5 h-3.5"
+                  />
+                  I claimed exempt from federal withholding on my W-4
+                </label>
               </div>
               {stateName !== "Texas" && (
                 <div>
                   <label className={labelCls}>YTD state tax withheld</label>
-                  <input
-                    type="number" value={ytdStateWithheld}
-                    onChange={(e) => setYtdStateWithheld(e.target.value)}
-                    className={inputCls} placeholder="$0"
-                  />
+                  {isExemptState ? (
+                    <p className="font-serif text-sm text-[#0F2A3D]/50 py-2">Not applicable — claiming exempt</p>
+                  ) : (
+                    <input
+                      type="number" value={ytdStateWithheld}
+                      onChange={(e) => setYtdStateWithheld(e.target.value)}
+                      className={inputCls} placeholder="$0"
+                    />
+                  )}
+                  <label className="flex items-center gap-2 mt-2 font-sans text-xs text-[#0F2A3D]/60 cursor-pointer">
+                    <input
+                      type="checkbox" checked={isExemptState}
+                      onChange={(e) => setIsExemptState(e.target.checked)}
+                      className="accent-[#C9962E] w-3.5 h-3.5"
+                    />
+                    I claimed exempt from state withholding
+                  </label>
                 </div>
               )}
             </div>
@@ -938,7 +979,8 @@ function ResultsView({ results, stateName, isNYC, onBack, submitLead }) {
   const {
     fedLiability, stateLiability, projectedFed, projectedState,
     fedGap, stateGap, fedRaisePerCheck, stateRaisePerCheck,
-    periodsRemaining, fedOnTrack, stateOnTrack, hasStateTax, stateConfidence
+    periodsRemaining, fedOnTrack, stateOnTrack, hasStateTax, stateConfidence,
+    isExemptFederal, isExemptState, fedExemptMismatch, stateExemptMismatch
   } = results;
 
   const [email, setEmail] = useState("");
@@ -973,6 +1015,11 @@ function ResultsView({ results, stateName, isNYC, onBack, submitLead }) {
       </div>
 
       <Gauge label="Federal" projected={projectedFed} liability={fedLiability} onTrack={fedOnTrack} />
+      {fedExemptMismatch && (
+        <p className="font-sans text-xs text-[#C9962E] -mt-4 mb-6 leading-relaxed">
+          You marked exempt from federal withholding, but based on this income, you may actually owe federal tax this year. Exempt status is only accurate if you expect zero tax liability. Worth revisiting your W-4.
+        </p>
+      )}
       {hasStateTax && (
         <div>
           <Gauge
@@ -986,6 +1033,11 @@ function ResultsView({ results, stateName, isNYC, onBack, submitLead }) {
               {stateName} uses a rough estimated rate rather than real brackets, so treat this number as a wider-margin estimate.
             </p>
           )}
+          {stateExemptMismatch && (
+            <p className="font-sans text-xs text-[#C9962E] -mt-4 mb-6 leading-relaxed">
+              You marked exempt from state withholding, but based on this income, you may actually owe state tax this year. Worth revisiting your state withholding form.
+            </p>
+          )}
         </div>
       )}
 
@@ -997,15 +1049,33 @@ function ResultsView({ results, stateName, isNYC, onBack, submitLead }) {
           <div className="space-y-3 font-serif text-[15px] leading-relaxed">
             {!fedOnTrack && (
               <p>
-                To close the federal gap of <strong>{fmt(fedGap)}</strong> over your remaining {periodsRemaining} pay period{periodsRemaining === 1 ? "" : "s"},
-                increase extra federal withholding by about <strong>{fmt(fedRaisePerCheck)}</strong> per paycheck.
-                This goes on line 4(c) of a new W-4 given to your employer.
+                {fedExemptMismatch ? (
+                  <>
+                    Since you're marked exempt, no federal tax is being withheld at all. Based on this income, revoking
+                    exempt status and having your employer withhold something is likely worth doing before year end.
+                  </>
+                ) : (
+                  <>
+                    To close the federal gap of <strong>{fmt(fedGap)}</strong> over your remaining {periodsRemaining} pay period{periodsRemaining === 1 ? "" : "s"},
+                    increase extra federal withholding by about <strong>{fmt(fedRaisePerCheck)}</strong> per paycheck.
+                    This goes on line 4(c) of a new W-4 given to your employer.
+                  </>
+                )}
               </p>
             )}
             {hasStateTax && !stateOnTrack && (
               <p>
-                To close the state gap of <strong>{fmt(stateGap)}</strong>, increase state withholding by about <strong>{fmt(stateRaisePerCheck)}</strong> per paycheck,
-                or ask your employer about your state's equivalent withholding adjustment form.
+                {stateExemptMismatch ? (
+                  <>
+                    Since you're marked exempt from state withholding, nothing is being withheld there either. Based on
+                    this income, revisiting that with your employer is likely worth doing before year end.
+                  </>
+                ) : (
+                  <>
+                    To close the state gap of <strong>{fmt(stateGap)}</strong>, increase state withholding by about <strong>{fmt(stateRaisePerCheck)}</strong> per paycheck,
+                    or ask your employer about your state's equivalent withholding adjustment form.
+                  </>
+                )}
               </p>
             )}
           </div>
